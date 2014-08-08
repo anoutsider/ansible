@@ -1,0 +1,745 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
+# Copyright 2014, Amr Abed, <amrenator@gmail.com>
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+
+
+DOCUMENTATION = '''
+---
+module: sensu
+short_description: This module interacts with Sensu using the sensu-api.
+description:
+  - "The M(sensu) module interacts with the sensu-api using it's different endpoints to perform various tasks"
+  - "B(Clients) you can list all clients, get information about a client, get all history of a client or delete a client from sensu"
+  - "B(Checks) you can list all checks, get information about a check or send a request to run a specific no-broadcast check"
+  - "B(Events) you can list all events, get information about an event or resolve and event using clients/checks combinations"
+  - "B(Stashes) you can list all stashes, get information about a stash, silence/unsilence specific clients/checks or create custom stashes"
+  - "B(Info) you can use this to get health info about sensu and it's various parts"
+version_added: "1.8"
+author: Amr Abed
+requirements:
+    - Sensu API access    
+options:
+  endpoint:
+    description:
+      - Indicates the Sensu Api Endpoint to use.
+      - C(clients) access clients api operations, get client info, list all clients, delete client, get client history.
+      - C(checks) access checks api operations, get check info, list all checks, request/run a check.
+      - C(events) access events api operations, get event info, list all events, get client events, resolve event.
+      - C(stashes) access stashes api operations, create a stash to silence a specific client or a specific check on a client, use it for generic data storage in sensu, or get an exisiting stash content.
+      - C(info) access info api operations, lists info about sensu and sensu connections.     
+    required: true
+    default: null
+    choices: [ "clients", "checks", "events", "stashes", "info"]  
+  action:
+    description:
+      - Indicates Action to perform on the Sensu Api Endpoint.
+      - C(create) is valid with C(stashes) Endpoint and is used to create a stash.
+      - C(delete) is valid with C(stashes) and C(clients) Endpoints and is used to delete stashes or clients.
+      - C(get) is valid with C(clients), C(checks) , C(stashes) and C(events) Endpoints and is used to query a specific client, check, stash or event.
+      - C(list) is valid with C(stashes), C(clients), C(checks) and C(events) Endpoints and is used to list all stashes, clients, checks or events.
+      - C(request) is valid with C(checks) Endpoint and is used to request/run a specific no-broadcast check.
+      - C(resolve) is valid with C(events) Endpoint and is used to resolve a specific event.
+      - C(history) is valid with C(clients) Endpoint and is used to query a specific client history.
+      - C(silence) is valid with C(stashes) Endpoint and is used to silence a client or a client/check.
+      - C(unsilence) is valid with C(stashes) Endpoint and is used to unsilence a client or a client/check.
+    required: false
+    default: null
+    choices: [ "create", "delete", "get", "list", "request", "resolve", "history"]
+  host:
+    description:
+      - The Sensu Api host to use.
+    required: false
+    default: null  
+  port:
+    description:
+      - The Sensu Api port to use.
+    required: false
+    default: null  
+  user:
+    description:
+      - The Sensu Api username to use.
+    required: false
+    default: null  
+  password:
+    description:
+      - The Sensu Api password to use.
+    required: false
+    default: null   
+  use_ssl:
+    description:
+      - Sets whether the api is accessed over ssl or not, http/https is appended to the url.
+    required: false
+    default: no 
+  client:
+    description:
+      - Set a specific client to query.
+    required: false
+    default: null  
+  check:
+    description:
+      - Set a specific check to query.
+    required: false
+    default: null    
+  subscribers:
+    description:
+      - Set specific subscribers for check request action. Type: list
+    required: false
+    default: 'all'  
+  stash:
+    description:
+      - Set a specific stash path to query.
+    required: false
+    default: null    
+  content:
+    description:
+      - Set a specific stash content to query. Type: hash dictionary (dict)
+    required: false
+    default: null  
+  expire:
+    description:
+      - Set a specific stash expiry.
+    required: false
+    default: null
+notes:
+  - These environment variables can be used, SENSU_HOST, SENSU_PORT, SENSU_USER and SENSU_PASSWORD for host, port, user and password parameters respectively.
+'''
+
+EXAMPLES = '''
+##
+# Clients Endpoint
+##
+
+# Get a list of all clients
+
+- name: Get sensu clients list
+  sensu: 
+    endpoint=clients
+    action=list
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"
+    
+# Get a client info
+#Requires a "client" parameter with a client name as a value
+
+- name: Get sensu client info
+  sensu: 
+    endpoint=clients
+    action=get
+    client=webserver1
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"  
+    
+# Get a client history
+# Gets an aggregated history of all occurances for a client and it's checks
+#Requires a "client" parameter with a client name as a value
+
+- name: Get sensu client history
+  sensu: 
+    endpoint=clients
+    action=history
+    client=webserver1
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"  
+    
+# Delete a client from sensu
+#Requires a "client" parameter with a client name as a value
+
+- name: Delete sensu client
+  sensu: 
+    endpoint=clients
+    action=delete
+    client=webserver2
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"
+    
+##
+# Checks Endpoint
+##    
+
+# Get a list of all checks
+
+- name: Get sensu checks list
+  sensu: 
+    endpoint=checks
+    action=list
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"
+    
+# Get a check info
+# Gets info about a specific sensu check
+# Requires a "check" parameter with a check name as a value
+
+- name: Get sensu check info
+  sensu: 
+    endpoint=checks
+    action=get
+    check=check_cpu
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"      
+    
+# Request/Run a sensu check
+# Runs a special type of sensu checks which are set to be non-scheduled/no-broadcast checks
+# Requires a "check" parameter with a check name as a value
+# You can use the "subscribers" parameter to limit the check to certain groups of sensu clients
+
+- name: Request sensu check
+  sensu: 
+    endpoint=clients
+    action=request
+    check=check_deployment
+    subscribers=['webservers','dbservers']
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"
+    
+##
+# Events Endpoint
+##    
+
+# Get a list of all events
+
+- name: Get sensu events list
+  sensu: 
+    endpoint=events
+    action=list
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"
+    
+# Get an event info
+# Gets info about a specific sensu event for any client or client/check
+# Requires a "client" parameter with a client name as a value
+# You can use the "check" parameter to limit the events to a certain check on the selected client
+
+- name: Get sensu event info
+  sensu: 
+    endpoint=events
+    action=get
+    client=webserver1
+    check=check_cpu
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"      
+    
+# Resolve a sensu event
+# Resolves a sensu event for a specific client's check
+# Requires a "client" parameter with a client name as a value
+# Requires a "check" parameter with a check name as a value
+
+- name: Resolve sensu check_disk_space for webservers
+  sensu: 
+    endpoint=events
+    action=resolve
+    check=check_disk_space
+    client="{{ item }}"
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass" 
+  with_items: groups['webservers'] 
+
+    
+##
+# Stashes Endpoint
+##    
+
+# Get a list of all stashes
+
+- name: Get sensu stashes list
+  sensu: 
+    endpoint=stashes
+    action=list
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"
+    
+# Get a stash info
+# Gets info about a specific sensu stash
+# Requires a "stash" parameter with a stash path as a value
+
+- name: Get sensu stash info
+  sensu: 
+    endpoint=stashes
+    action=get
+    stash="silence/webserver1/check_cpu"
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"      
+    
+# Delete a stash from sensu
+# Requires a "stash" parameter with a stash path as a value
+
+- name: Delete sensu stash
+  sensu: 
+    endpoint=stashes
+    action=delete
+    stash="frontend/some_json_data"
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"
+    
+# Create a sensu stash
+# Creates a sensu stash, stashes are json data documents that are stored in sensu and can have an expiry
+# They can be used for storing and utilizing any kind of data in sensu
+# Requires a "stash" parameter with a stash path as a value, this will be used as a key to store the stash
+# Takes an option "content" parameter Type: dict, can be used to populate the stash content in json
+# Takes an optional "expire" parameter, can be used the ttl in seconds for the stash, after that it will be automatically deleted
+
+- name: Create a sensu stash to store some frontend data
+  sensu: 
+    endpoint=stashes
+    action=create
+    stash="frontend/some_json_data"
+    content='{"login_errors":33, "forgot_password":6, "timestamp":237762272}'
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"   
+    
+# Silence a sensu client
+# Silences any events for a specific sensu client, this is mainly used to schedule outages for clients.
+# This is basically an interface to stashes, but with a specific path format the sensu uses to silence clients or cliesnt/checks
+# Requires a "client" parameter with a client name as a value
+# Takes an optional "check" with a check name as a value, this is used to limit the silencing to a specific check
+# Takes an optional "content" parameter Type: dict, can be used as content of the silencing, useful for storing extra info about the reason of silencing for example.
+# Takes an optional "expire" parameter, can be used to set the ttl in seconds for the silencing, after that it will be automatically deleted
+
+- name: Silence webservers for deployment
+  sensu: 
+    endpoint=stashes
+    action=silence
+    client=webserver1
+    content='{"reason":"app deployment"}'
+    expire=60
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"   
+    
+# Unsilence a sensu client/check
+# Unsilences any events for a specific sensu client check, this is mainly used to resume silenced client/checks.
+# This is could be used in combination with a no expiry silencing, to resume checks on a client based on some tests, like waiting for ssh ports
+# Requires a "client" parameter with a client name as a value
+# Takes an optional "check" with a check name as a value, this is used to limit the unsilencing to a specific check
+
+- name: Unsilence dbserver2 after reboot
+  sensu: 
+    endpoint=stashes
+    action=unsilence
+    client=dbserver2
+    check=check_mysql_live
+    host="sensu.host.example" 
+    port=4567 
+    user="username" 
+    password="sensupass"      
+'''
+
+##################################################################
+# Load module requirements
+##################################################################
+
+import os
+try:
+  import json
+except ImportError:
+  import simplejson as json
+  
+##################################################################
+# Module main class
+##################################################################  
+class SensuApi:
+
+    # This class handles communications with the sensu-api and performes various actions on it's endpoints
+    
+    def __init__(self, module, host, port, user, password, use_ssl):
+        # Initialize sensu-api url settings                   
+        self.module = module
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.use_ssl = use_ssl
+        self.proto = "http"
+        
+        if self.use_ssl:
+            self.proto = "https"
+            
+        if self.user and self.password:
+            # We use url_username, & url_password to get around an issue with special characters in usernames/password 
+            # when appended to the url
+            self.module.params['url_username'] = self.user
+            self.module.params['url_password'] = self.password           
+        self.url = "{}://{}:{}".format(self.proto, host, port)
+
+    def _call_api(self, url, method, data=None):    
+        # Sends Api calls to sensu-api
+        return fetch_url(self.module, url, data=data, method=method)
+        
+    def get_client(self, client):        
+        # Gets information about a specific client from sensu-api        
+        response, info = self._call_api("{}/clients/{}".format(self.url, client), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get client: %s data, msg: %s" % (client, info['msg']))
+        return json.load(response)        
+
+    def get_client_history(self, client):
+        # Gets client history from sensu-api
+        response, info = self._call_api("{}/clients/{}/history".format(self.url, client), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get client: %s history, msg: %s" % (client, info['msg']))
+        return json.load(response)   
+        
+    def delete_client(self, client):
+        # Deletes a specific client from sensu clients      
+        response, info = self._call_api("{}/clients/{}".format(self.url, client), "delete")
+        if info['status'] not in [200,202]:
+            self.module.fail_json(msg="Unable to delete client: %s, msg: %s" % (client, info['msg']))
+        return json.load(response)    
+
+    def get_all_clients(self):
+        # Gets a list of all sensu clients
+        response, info = self._call_api("{}/clients".format(self.url), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get clients list, msg: %s" % (info['msg']))
+        return json.load(response)    
+
+    def get_check(self, check):
+        # Gets information about a specific check from sensu-api
+        response, info = self._call_api("{}/checks/{}".format(self.url, check), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get check: %s data, msg: %s" % (check, info['msg']))
+        return json.load(response)   
+
+    def get_all_checks(self):
+        # Gets a list of all checks registered in sensu
+        response, info = self._call_api("{}/checks".format(self.url), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get checks list, msg: %s" % (info['msg']))
+        return json.load(response) 
+
+    def request_check(self, check, subscribers=[]):
+        # Sends a request to run an no broadcast unscheduled check in sensu
+        # Accepts an optional subscribers parameter of type list
+        data = {
+            "check": check,
+            "subscribers": subscribers
+        }
+        response, info = self._call_api("{}/check/request".format(self.url), "post", json.dumps(data))
+        if info['status'] not in [200,202]:
+            self.module.fail_json(msg="Unable to process check request, msg: %s" % (info['msg']))
+        return json.load(response)        
+        
+    def get_event(self, client, check=None):
+        # Gets information about a specific event from sensu-api
+        # Can take either a client or a check parameter or both
+        if check:
+            response, info = self._call_api("{}/events/{}/{}".format(self.url, client, check), "get")
+        else:    
+            response, info = self._call_api("{}/events/{}".format(self.url, client), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get events data for client: %s & check: %s, msg: %s" % (client, check, info['msg']))
+        return json.load(response)              
+        
+    def get_all_events(self):
+        # Gets a list of events registered in sensu
+        response, info = self._call_api("{}/events".format(self.url), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get events list, msg: %s" % (info['msg']))
+        return json.load(response) 
+
+    def resolve_event(self, client, check):
+        # Resolves a sensu event.
+        # client and check as required arguments
+        data = {
+            "client": client,
+            "check": check
+        }
+        response, info = self._call_api("{}/resolve".format(self.url), "post", json.dumps(data))
+        # Sensu Api documents the return as 202 but it returns 200 on success, bug? same inconsistencies are noticed elsewhere.
+        if info['status'] not in [200,202]:
+            self.module.fail_json(msg="Unable to resolve event for client: %s & check: %s, msg: %s" % (client, check, info['msg']))
+        return json.load(response)      
+
+    def get_stash(self, stash):
+        # Gets information about a sensu-api stash
+        # Takes a required stash argument
+        response, info = self._call_api("{}/stashes/{}".format(self.url, stash), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get stash: %s data, msg: %s" % (stash, info['msg']))
+        return json.load(response)   
+        
+    def create_stash(self, stash, content=None, expire=None):
+        # Creates a misc stash on sensu-api, this can be used for storing any kind of json data
+        # This is not used for silencing clients/checks, we have a dedicated function for that "silence"
+        # Takes a stash path/name as a required argument
+        # Takes two optional "content,expire" arguments that will populate the stash and set it's expiry
+        data = {
+            "path": stash,
+            "content": content,
+            "expire": expire,
+        }        
+        response, info = self._call_api("{}/stashes".format(self.url), "post", json.dumps(data))                
+        if info['status'] not in [200,201]:
+            self.module.fail_json(msg="Unable to create stash: %s, msg: %s" % (stash, info['msg']))
+        msg = "Stash: {} created".format(stash)          
+        return msg    
+
+    def delete_stash(self, stash):
+        # Deletes an existing stash on sensu-api
+        # This is not used for unsilencing clients/checks, we have a dedicated function for that "unsilence"
+        # Takes a required stash argument
+        response, info = self._call_api("{}/stashes/{}".format(self.url, stash), "delete")
+        if info['status'] not in [200,204]:
+            self.module.fail_json(msg="Unable to delete stash: %s, msg: %s" % (stash, info['msg']))
+        msg = "Stash: {} deleted".format(stash)          
+        return msg                       
+
+    def get_all_stashes(self):
+        # Gets a list of all stashes in sensu-api
+        response, info = self._call_api("{}/stashes".format(self.url), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to get stashes list, msg: %s" % (info['msg']))
+        return json.load(response)   
+        
+    def silence(self, client, check=None, expire=None, content=None):
+        # Silence a sensu client, or a specific check on a client
+        # Takes a required client argument, and optional check, expire and content arguments
+        # expire allows you to set the time the client will be silenced for
+        # content allows you to set custom info about the silenced stash
+        checkName = '/' + check if check else ''
+        stash = 'silence/' + client + checkName
+        # add timestamp of the silence, useful for sensu dashboards
+        content['timestamp'] = time.time()
+        data = {
+            "path": stash,
+            "content": content,
+            "expire": expire,
+        }         
+        response, info = self._call_api("{}/stashes".format(self.url), "post", json.dumps(data))
+        if info['status'] not in [200,201]:
+            self.module.fail_json(msg="Unable to silence client: %s, with stash path: %s, msg: %s" % (client, stash, info['msg']))
+            
+        msg = "Client: {} silenced".format(client) 
+        if check:
+            msg = "Client: {} Check: {} silenced".format(client, check)           
+        return msg   
+        
+    def unsilence(self, client, check=None):
+        # Unsilence a sensu client, or a specific check on a client
+        # Takes a required client argument, and optional check argument
+        checkName = '/' + check if check else ''
+        stash = 'silence/' + client + checkName
+        response, info = self._call_api("{}/stashes/{}".format(self.url, stash), "delete")
+        if info['status'] not in [200,204]:
+            self.module.fail_json(msg="Unable to unsilence client: %s with stash path: %s, msg: %s" % (client, stash, info['msg']))        
+            
+        msg = "Client: {} unsilenced".format(client) 
+        if check:
+            msg = "Client: {} Check: {} unsilenced".format(client, check)           
+        return msg   
+        
+    def get_info(self):
+        # Gets information about sensu and its connections
+        response, info = self._call_api("{}/info".format(self.url), "get")
+        if info['status'] not in [200]:
+            self.module.fail_json(msg="Unable to unsilence client: %s with stash path: %s, msg: %s" % (client, stash, info['msg']))        
+        return json.load(response)          
+  
+##################################################################
+# Module initialization
+##################################################################  
+def main():
+    ENDPOINT_CHOICES = [
+        'clients',
+        'checks',
+        'events',
+        'stashes',
+        'info',
+    ]   
+
+    ACTION_CHOICES = [
+        'create',
+        'delete',
+        'get',
+        'list',
+        'request',
+        'resolve',
+        'history',
+        'silence',
+        'unsilence',
+    ]
+
+    module = AnsibleModule(
+        argument_spec=dict(
+            endpoint=dict(required=True, default=None, choices=ENDPOINT_CHOICES),
+            action=dict(required=False, default=None, choices=ACTION_CHOICES),
+            host=dict(required=False, default=None),
+            port=dict(required=False, default=None, type='int'),
+            user=dict(required=False, default=None, no_log=True),
+            password=dict(required=False, default=None, no_log=True),
+            use_ssl=dict(required=False, default='no', type='bool', choices=BOOLEANS),
+            client=dict(required=False, default=None),
+            check=dict(required=False, default=None),
+            subscribers=dict(required=False, default=[], type='list'),
+            stash=dict(required=False, default=None),
+            content=dict(required=False, default={}, type='dict'),            
+            expire=dict(required=False, default=None, type='int'),            
+        )
+    )
+
+    endpoint = module.params['endpoint']
+    action = module.params['action']
+    host = module.params['host'] or os.environ['SENSU_HOST']
+    port = module.params['port'] or os.environ['SENSU_PORT']
+    user = module.params['user'] or os.environ['SENSU_USER']
+    password = module.params['password'] or os.environ['SENSU_PASSWORD']
+    use_ssl = module.params['use_ssl']
+    client = module.params['client']
+    check = module.params['check']
+    subscribers = module.params['subscribers']
+    stash = module.params['stash']
+    content = module.params['content']
+    expire = module.params['expire']    
+    
+    ##################################################################
+    # Check parameter requirements for endpoints and actions
+    ##################################################################
+    if endpoint in ['clients']:
+        if action not in ['delete', 'history', 'get', 'list']:
+            module.fail_json(msg='invalid action used for clients endpoint, allowed actions are: delete, history, get, list')
+        if action in ['delete', 'history', 'get']:
+            if not client:
+                module.fail_json(msg='the requested action requires a client parameter to be set')
+        
+    if endpoint in ['checks']:
+        if action not in ['get', 'list', 'request']:
+            module.fail_json(msg='invalid action used for checks endpoint, allowed actions are: get, list, request')    
+        if action in ['get', 'request']:
+            if not check:
+                module.fail_json(msg='the requested action requires a check parameter to be set')
+                    
+    if endpoint in ['events']:
+        if action not in ['get', 'list', 'resolve']:
+            module.fail_json(msg='invalid action used for events endpoint, allowed actions are: get, list, resolve')    
+        if action in ['resolve']:
+            if not check and not client:
+                module.fail_json(msg='the requested action requires a check and a client parameters to be set')           
+        if action in ['get']:
+            if not client:
+                module.fail_json(msg='the requested action requires a client parameter to be set')            
+        
+    if endpoint in ['stashes']:
+        if action not in ['get', 'create', 'delete', 'list', 'silence', 'unsilence']:
+            module.fail_json(msg='invalid action used for stashes endpoint, allowed actions are: get, create, delete, list, silence, unsilence')    
+        if action in ['silence']:
+            if not client:
+                module.fail_json(msg='the requested action requires a client parameter to be set')         
+        if action in ['unsilence']:
+            if not client:
+                module.fail_json(msg='the requested action requires a client parameter to be set')           
+        if action in ['delete']:
+            if not stash:
+                module.fail_json(msg='the requested action requires a stash parameter to be set')      
+        if action in ['get']:
+            if not stash:
+                module.fail_json(msg='the requested action requires a stash parameter to be set')      
+        if action in ['create']:
+            if not stash:
+                module.fail_json(msg='the requested action requires a stash parameter to be set')
+
+    ##################################################################
+    # Setup the api & Run the selected module commands
+    ##################################################################    
+
+    sensu_api = SensuApi(module, host, port, user, password, use_ssl)
+            
+    # Run clients endpoint actions
+    if endpoint == 'clients':
+        if action == 'get':
+            result = sensu_api.get_client(client)
+        if action == 'delete':
+            result = sensu_api.delete_client(client)           
+        if action == 'list':
+            result = sensu_api.get_all_clients()           
+        if action == 'history':
+            result = sensu_api.get_client_history(client) 
+            
+    # Run checks endpoint actions
+    if endpoint == 'checks':
+        if action == 'get':
+            result = sensu_api.get_check(check)
+        if action == 'list':
+            result = sensu_api.get_all_checks()           
+        if action == 'request':
+            result = sensu_api.request_check(check, subscribers)    
+            
+    # Run events endpoint actions
+    if endpoint == 'events':
+        if action == 'get':
+            result = sensu_api.get_event(client, check)
+        if action == 'list':
+            result = sensu_api.get_all_events()           
+        if action == 'resolve':
+            result = sensu_api.resolve_event(client, check)  
+            
+    # Run stashes endpoint actions
+    if endpoint == 'stashes':
+        if action == 'get':
+            result = sensu_api.get_stash(stash)
+        if action == 'create':
+            result = sensu_api.create_stash(stash, content, expire)           
+        if action == 'delete':
+            result = sensu_api.delete_stash(stash)             
+        if action == 'list':
+            result = sensu_api.get_all_stashes()               
+        if action == 'silence':
+            result = sensu_api.silence(client, check, expire, content)            
+        if action == 'unsilence':
+            result = sensu_api.unsilence(client, check)  
+            
+    # Run info endpoint action
+    if endpoint == 'info':
+        result = sensu_api.get_info()
+
+    module.exit_json(changed=True, msg=result)
+
+##################################################################
+# import module snippets
+##################################################################
+from ansible.module_utils.basic import *
+from ansible.module_utils.urls import *
+main()
